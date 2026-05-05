@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canva 自動播放 + 音樂排程</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: "Microsoft JhengHei", "Segoe UI", sans-serif; }
+
+  /* Canva iframe 容器 */
+  .canva-wrapper {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+  }
+  .canva-wrapper iframe {
+    width: 100%; height: 100%;
+    border: none; display: block;
+  }
+
+  /* 啟用遮罩 */
+  #overlay {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999; cursor: pointer;
+    transition: opacity 0.4s;
+  }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+  #overlay .box {
+    text-align: center; color: #fff; padding: 40px 60px;
+    border: 2px solid #fff; border-radius: 16px;
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: blur(6px);
+  }
+  #overlay h1 { font-size: 28px; margin-bottom: 14px; }
+  #overlay p { font-size: 16px; opacity: 0.85; line-height: 1.6; }
+  #overlay .btn {
+    margin-top: 22px; padding: 12px 36px;
+    background: #4caf50; border: none; border-radius: 8px;
+    color: #fff; font-size: 18px; font-weight: bold; cursor: pointer;
+    transition: background 0.2s;
+  }
+  #overlay .btn:hover { background: #45a049; }
+
+  /* 控制面板 */
+  #panel {
+    position: fixed; right: 16px; bottom: 16px;
+    width: 240px;
+    background: rgba(20, 20, 20, 0.88);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 13px;
+    z-index: 1000;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+    transition: transform 0.3s, opacity 0.3s;
+  }
+  #panel.collapsed {
+    transform: translateY(calc(100% - 36px));
+  }
+  #panel .header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px; padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    cursor: pointer; user-select: none;
+  }
+  #panel .header .title { font-weight: bold; font-size: 13px; }
+  #panel .header .toggle { font-size: 14px; opacity: 0.7; }
+  #panel .row { margin: 6px 0; display: flex; justify-content: space-between; align-items: center; }
+  #panel .label { opacity: 0.7; }
+  #panel .value { font-weight: bold; font-variant-numeric: tabular-nums; }
+  #panel .status-playing { color: #4caf50; }
+  #panel .status-idle { color: #9e9e9e; }
+  #panel .next { color: #ffc107; font-size: 12px; }
+  #panel .volume-row { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); }
+  #panel .volume-row input[type=range] {
+    flex: 1; margin: 0 6px; accent-color: #4caf50;
+  }
+  #panel .vol-val { min-width: 36px; text-align: right; }
+</style>
+</head>
+<body>
+
+<!-- Canva 簡報嵌入 -->
+<div class="canva-wrapper">
+  <iframe
+    src="https://www.canva.com/design/DAHINop9Qvg/1dv4RlbZUFhmdYe3TQ-yTg/view?embed"
+    allowfullscreen="allowfullscreen"
+    allow="fullscreen">
+  </iframe>
+</div>
+
+<!-- 音訊元素 -->
+<audio id="bgm" src="CLAP3.mp3" loop preload="auto"></audio>
+
+<!-- 控制面板 -->
+<div id="panel">
+  <div class="header" id="panelHeader">
+    <span class="title">🎵 音樂排程</span>
+    <span class="toggle" id="toggleBtn">▼</span>
+  </div>
+  <div class="row">
+    <span class="label">目前時間</span>
+    <span class="value" id="clock">--:--:--</span>
+  </div>
+  <div class="row">
+    <span class="label">狀態</span>
+    <span class="value status-idle" id="status">🔇 待機</span>
+  </div>
+  <div class="row">
+    <span class="label">下一時段</span>
+    <span class="next" id="nextSlot">--</span>
+  </div>
+  <div class="row volume-row">
+    <span class="label">🔊</span>
+    <input type="range" id="volume" min="0" max="100" value="50">
+    <span class="vol-val" id="volVal">50%</span>
+  </div>
+</div>
+
+<!-- 啟用遮罩 -->
+<div id="overlay">
+  <div class="box">
+    <h1>🎬 Canva 簡報 + 音樂排程</h1>
+    <p>
+      點擊下方按鈕以啟用自動播放功能。<br>
+      音樂將依排定時間自動播放。
+    </p>
+    <button class="btn" id="startBtn">點擊啟用</button>
+  </div>
+</div>
+
+<script>
+  // ============ 音樂排程表 ============
+  const schedule = [
+    { start: "08:10", end: "08:20" },
+    { start: "09:05", end: "09:15" },
+    { start: "10:00", end: "10:10" },
+    { start: "10:55", end: "11:05" },
+    { start: "12:15", end: "12:30" },
+    { start: "13:50", end: "14:00" },
+    { start: "14:45", end: "14:55" },
+    { start: "15:40", end: "15:55" }
+  ];
+
+  // ============ DOM 參考 ============
+  const audio     = document.getElementById("bgm");
+  const overlay   = document.getElementById("overlay");
+  const startBtn  = document.getElementById("startBtn");
+  const clockEl   = document.getElementById("clock");
+  const statusEl  = document.getElementById("status");
+  const nextEl    = document.getElementById("nextSlot");
+  const volSlider = document.getElementById("volume");
+  const volVal    = document.getElementById("volVal");
+  const panel     = document.getElementById("panel");
+  const panelHdr  = document.getElementById("panelHeader");
+  const toggleBtn = document.getElementById("toggleBtn");
+
+  // ============ 初始音量 50% ============
+  audio.volume = 0.5;
+  volSlider.addEventListener("input", () => {
+    const v = parseInt(volSlider.value, 10);
+    audio.volume = v / 100;
+    volVal.textContent = v + "%";
+  });
+
+  // ============ 啟用按鈕 ============
+  let activated = false;
+  startBtn.addEventListener("click", async () => {
+    try {
+      // 嘗試播放後立即暫停，以解鎖音訊
+      await audio.play();
+      audio.pause();
+      audio.currentTime = 0;
+    } catch (e) {
+      console.warn("音訊解鎖失敗:", e);
+    }
+    activated = true;
+    overlay.classList.add("hidden");
+    setTimeout(() => overlay.style.display = "none", 400);
+  });
+
+  // ============ 摺疊面板 ============
+  panelHdr.addEventListener("click", () => {
+    panel.classList.toggle("collapsed");
+    toggleBtn.textContent = panel.classList.contains("collapsed") ? "▲" : "▼";
+  });
+
+  // ============ 工具函式 ============
+  function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+
+  function getNowHM() {
+    const d = new Date();
+    return pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  }
+
+  function getNowHMS() {
+    const d = new Date();
+    return pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds());
+  }
+
+  // 當前時間是否在某個時段內 (start <= now < end)
+  function inSlot(nowHM, slot) {
+    return nowHM >= slot.start && nowHM < slot.end;
+  }
+
+  // 找到目前所屬時段，找不到回傳 null
+  function currentSlot(nowHM) {
+    for (const s of schedule) {
+      if (inSlot(nowHM, s)) return s;
+    }
+    return null;
+  }
+
+  // 找下一個未來時段
+  function nextSlot(nowHM) {
+    for (const s of schedule) {
+      if (nowHM < s.start) return s;
+    }
+    return null; // 今日已無
+  }
+
+  // ============ 主循環（每秒檢查） ============
+  function tick() {
+    const nowHM  = getNowHM();
+    const nowHMS = getNowHMS();
+
+    clockEl.textContent = nowHMS;
+
+    // 尋找當前時段
+    const cur = currentSlot(nowHM);
+
+    if (activated) {
+      if (cur) {
+        // 在時段內
+        if (audio.paused) {
+          audio.play().catch(err => console.warn("播放失敗:", err));
+        }
+        statusEl.textContent = "🔊 播放中";
+        statusEl.className = "value status-playing";
+        nextEl.textContent = cur.start + " ~ " + cur.end + "（進行中）";
+      } else {
+        // 不在任何時段內
+        if (!audio.paused) {
+          audio.pause();
+          audio.currentTime = 0;
+        }
+        statusEl.textContent = "🔇 待機";
+        statusEl.className = "value status-idle";
+
+        const nxt = nextSlot(nowHM);
+        nextEl.textContent = nxt ? (nxt.start + " ~ " + nxt.end) : "今日排程已結束";
+      }
+    } else {
+      // 尚未啟用
+      statusEl.textContent = "⏸ 未啟用";
+      statusEl.className = "value status-idle";
+      const nxt = nextSlot(nowHM) || (cur ? cur : null);
+      nextEl.textContent = cur
+        ? (cur.start + " ~ " + cur.end + "（進行中）")
+        : (nxt ? (nxt.start + " ~ " + nxt.end) : "今日排程已結束");
+    }
+  }
+
+  // 立即執行一次，並每秒執行
+  tick();
+  setInterval(tick, 1000);
+</script>
+</body>
+</html>
