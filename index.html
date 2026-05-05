@@ -160,7 +160,7 @@
 <div class="canva-wrapper">
   <iframe
     id="canvaFrame"
-    src="https://www.canva.com/design/DAHINop9Qvg/1dv4RlbZUFhmdYe3TQ-yTg/watch?embed&autoplay=yes&timer=5"
+    src="https://www.canva.com/design/DAHINop9Qvg/1dv4RlbZUFhmdYe3TQ-yTg/view?embed#1"
     allowfullscreen="allowfullscreen"
     allow="fullscreen; autoplay">
   </iframe>
@@ -196,9 +196,9 @@
   <div class="row" style="margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.1); flex-direction:column; align-items:stretch;">
     <span class="label" style="margin-bottom:6px;">Canva 輪播模式</span>
     <select id="modeSelect" style="background:#333; color:#fff; border:1px solid #555; border-radius:4px; padding:4px; font-size:12px;">
-      <option value="watch">模式 1：watch 自動播放（預設）</option>
+      <option value="watch">模式 1：watch 自動播放</option>
       <option value="view">模式 2：view embed（手動）</option>
-      <option value="force" id="modeForceOption">模式 3：強制自動換頁</option>
+      <option value="force" id="modeForceOption" selected>模式 3：強制自動換頁（預設）</option>
     </select>
     <span class="label" style="margin:8px 0 6px;">切換特效（模式 3 專用）</span>
     <select id="fxSelect" style="background:#333; color:#fff; border:1px solid #555; border-radius:4px; padding:4px; font-size:12px;">
@@ -535,8 +535,11 @@
   // 依設定動態更新模式 3 選項文字
   const modeForceOption = document.getElementById("modeForceOption");
   if (modeForceOption) {
-    modeForceOption.textContent = `模式 3：強制每 ${SLIDE_INTERVAL_MS / 1000} 秒重載換頁`;
+    modeForceOption.textContent = `模式 3：強制每 ${SLIDE_INTERVAL_MS / 1000} 秒重載換頁（預設）`;
   }
+
+  // ✅ 頁面載入後自動啟動模式 3（預設）
+  applyMode("force");
 </script>
 </body>
 </html>
