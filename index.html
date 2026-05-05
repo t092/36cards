@@ -84,12 +84,13 @@
 </head>
 <body>
 
-<!-- Canva 簡報嵌入 -->
+<!-- Canva 簡報嵌入（使用 watch 端點 + autoplay + timer 參數強制自動輪播 5 秒） -->
 <div class="canva-wrapper">
   <iframe
-    src="https://www.canva.com/design/DAHINop9Qvg/1dv4RlbZUFhmdYe3TQ-yTg/view?embed"
+    id="canvaFrame"
+    src="https://www.canva.com/design/DAHINop9Qvg/1dv4RlbZUFhmdYe3TQ-yTg/watch?embed&autoplay=yes&timer=5"
     allowfullscreen="allowfullscreen"
-    allow="fullscreen">
+    allow="fullscreen; autoplay">
   </iframe>
 </div>
 
@@ -118,6 +119,15 @@
     <span class="label">🔊</span>
     <input type="range" id="volume" min="0" max="100" value="50">
     <span class="vol-val" id="volVal">50%</span>
+  </div>
+  <div class="row" style="margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.1); flex-direction:column; align-items:stretch;">
+    <span class="label" style="margin-bottom:6px;">Canva 輪播模式</span>
+    <select id="modeSelect" style="background:#333; color:#fff; border:1px solid #555; border-radius:4px; padding:4px; font-size:12px;">
+      <option value="watch">模式 1：watch 自動播放（預設）</option>
+      <option value="view">模式 2：view embed（手動）</option>
+      <option value="force">模式 3：強制每 5 秒重載換頁</option>
+    </select>
+    <button id="reloadBtn" style="margin-top:6px; background:#2196f3; color:#fff; border:none; border-radius:4px; padding:6px; font-size:12px; cursor:pointer;">套用並重載 Canva</button>
   </div>
 </div>
 
@@ -268,6 +278,45 @@
   // 立即執行一次，並每秒執行
   tick();
   setInterval(tick, 1000);
+
+  // ============ Canva 輪播模式切換 ============
+  const canvaFrame  = document.getElementById("canvaFrame");
+  const modeSelect  = document.getElementById("modeSelect");
+  const reloadBtn   = document.getElementById("reloadBtn");
+  const DESIGN_BASE = "https://www.canva.com/design/DAHINop9Qvg/1dv4RlbZUFhmdYe3TQ-yTg";
+
+  let forceInterval = null;
+  let currentPage   = 1;
+
+  function applyMode(mode) {
+    // 清除舊的強制輪播計時器
+    if (forceInterval) {
+      clearInterval(forceInterval);
+      forceInterval = null;
+    }
+
+    if (mode === "watch") {
+      // 模式 1：Canva watch 端點自動播放 + 5 秒計時
+      canvaFrame.src = DESIGN_BASE + "/watch?embed&autoplay=yes&timer=5";
+    } else if (mode === "view") {
+      // 模式 2：傳統 view embed（需手動）
+      canvaFrame.src = DESIGN_BASE + "/view?embed";
+    } else if (mode === "force") {
+      // 模式 3：強制每 5 秒重載 iframe 帶 page 參數
+      currentPage = 1;
+      canvaFrame.src = DESIGN_BASE + "/view?embed&ui=eyJBIjp7IkEiOnRydWV9fQ#" + currentPage;
+      forceInterval = setInterval(() => {
+        currentPage++;
+        // 到頁尾後嘗試循環回第一頁（Canva 若頁數不足會停在最後一頁）
+        if (currentPage > 50) currentPage = 1;
+        canvaFrame.src = DESIGN_BASE + "/view?embed#" + currentPage;
+      }, 5000);
+    }
+  }
+
+  reloadBtn.addEventListener("click", () => {
+    applyMode(modeSelect.value);
+  });
 </script>
 </body>
 </html>
