@@ -12,10 +12,69 @@
   .canva-wrapper {
     position: absolute; top: 0; left: 0;
     width: 100%; height: 100%;
+    perspective: 1200px;
   }
   .canva-wrapper iframe {
     width: 100%; height: 100%;
     border: none; display: block;
+    transition: opacity 0.6s ease, transform 0.6s ease, filter 0.6s ease;
+    transform-origin: center center;
+    will-change: opacity, transform, filter;
+  }
+
+  /* ===== 切換特效 ===== */
+  /* 淡入淡出 */
+  .fx-fade-out { opacity: 0; }
+  .fx-fade-in  { opacity: 1; }
+
+  /* 縮放淡入 */
+  .fx-zoom-out { opacity: 0; transform: scale(0.85); filter: blur(6px); }
+  .fx-zoom-in  { opacity: 1; transform: scale(1);    filter: blur(0); }
+
+  /* 左右滑動 */
+  .fx-slide-out { opacity: 0; transform: translateX(-80px); }
+  .fx-slide-in  { opacity: 1; transform: translateX(0); }
+
+  /* 3D 翻轉 */
+  .fx-flip-out { opacity: 0; transform: rotateY(-90deg); }
+  .fx-flip-in  { opacity: 1; transform: rotateY(0deg); }
+
+  /* 旋轉淡入 */
+  .fx-rotate-out { opacity: 0; transform: rotate(-12deg) scale(0.9); filter: blur(4px); }
+  .fx-rotate-in  { opacity: 1; transform: rotate(0deg) scale(1);     filter: blur(0); }
+
+  /* 模糊擴散 */
+  .fx-blur-out { opacity: 0; filter: blur(24px) brightness(1.4); }
+  .fx-blur-in  { opacity: 1; filter: blur(0) brightness(1); }
+
+  /* 畫面閃光效果（疊加層） */
+  .flash-overlay {
+    position: fixed; inset: 0;
+    background: radial-gradient(circle at center, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 70%);
+    opacity: 0; pointer-events: none;
+    z-index: 500;
+    transition: opacity 0.4s ease;
+  }
+  .flash-overlay.active { opacity: 1; }
+
+  /* 粒子效果容器 */
+  .particles {
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 400;
+    overflow: hidden;
+  }
+  .particle {
+    position: absolute;
+    width: 6px; height: 6px;
+    background: #fff;
+    border-radius: 50%;
+    opacity: 0;
+    box-shadow: 0 0 10px #fff, 0 0 20px #4caf50;
+  }
+  @keyframes particleBurst {
+    0%   { opacity: 1; transform: translate(0,0) scale(1); }
+    100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(0.3); }
   }
 
   /* 啟用遮罩 */
@@ -125,11 +184,30 @@
     <select id="modeSelect" style="background:#333; color:#fff; border:1px solid #555; border-radius:4px; padding:4px; font-size:12px;">
       <option value="watch">模式 1：watch 自動播放（預設）</option>
       <option value="view">模式 2：view embed（手動）</option>
-      <option value="force">模式 3：強制每 5 秒重載換頁</option>
+      <option value="force">模式 3：強制每 8 秒重載換頁</option>
     </select>
-    <button id="reloadBtn" style="margin-top:6px; background:#2196f3; color:#fff; border:none; border-radius:4px; padding:6px; font-size:12px; cursor:pointer;">套用並重載 Canva</button>
+    <span class="label" style="margin:8px 0 6px;">切換特效（模式 3 專用）</span>
+    <select id="fxSelect" style="background:#333; color:#fff; border:1px solid #555; border-radius:4px; padding:4px; font-size:12px;">
+      <option value="random">🎲 隨機特效</option>
+      <option value="fade">✨ 淡入淡出</option>
+      <option value="zoom">🔍 縮放模糊</option>
+      <option value="slide">➡️ 左右滑動</option>
+      <option value="flip">🔄 3D 翻轉</option>
+      <option value="rotate">🌀 旋轉淡入</option>
+      <option value="blur">💫 模糊擴散</option>
+      <option value="flash">⚡ 閃光 + 粒子</option>
+    </select>
+    <label style="margin-top:6px; display:flex; align-items:center; gap:6px; font-size:12px; opacity:0.85;">
+      <input type="checkbox" id="particleToggle" checked>
+      <span>啟用粒子特效</span>
+    </label>
+    <button id="reloadBtn" style="margin-top:8px; background:#2196f3; color:#fff; border:none; border-radius:4px; padding:6px; font-size:12px; cursor:pointer;">套用並重載 Canva</button>
   </div>
 </div>
+
+<!-- 特效層 -->
+<div class="flash-overlay" id="flashOverlay"></div>
+<div class="particles" id="particles"></div>
 
 <!-- 啟用遮罩 -->
 <div id="overlay">
@@ -280,13 +358,111 @@
   setInterval(tick, 1000);
 
   // ============ Canva 輪播模式切換 ============
-  const canvaFrame  = document.getElementById("canvaFrame");
-  const modeSelect  = document.getElementById("modeSelect");
-  const reloadBtn   = document.getElementById("reloadBtn");
-  const DESIGN_BASE = "https://www.canva.com/design/DAHINop9Qvg/1dv4RlbZUFhmdYe3TQ-yTg";
+  const canvaFrame   = document.getElementById("canvaFrame");
+  const modeSelect   = document.getElementById("modeSelect");
+  const fxSelect     = document.getElementById("fxSelect");
+  const reloadBtn    = document.getElementById("reloadBtn");
+  const particleTgl  = document.getElementById("particleToggle");
+  const flashOverlay = document.getElementById("flashOverlay");
+  const particleBox  = document.getElementById("particles");
+  const DESIGN_BASE  = "https://www.canva.com/design/DAHINop9Qvg/1dv4RlbZUFhmdYe3TQ-yTg";
 
   let forceInterval = null;
   let currentPage   = 1;
+
+  // 所有特效清單（用於隨機）
+  const ALL_FX = ["fade", "zoom", "slide", "flip", "rotate", "blur", "flash"];
+
+  // 粒子爆發效果
+  function burstParticles(count = 30) {
+    if (!particleTgl.checked) return;
+    const colors = ["#fff", "#4caf50", "#2196f3", "#ffc107", "#e91e63", "#9c27b0"];
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement("div");
+      p.className = "particle";
+      const angle = Math.random() * Math.PI * 2;
+      const dist  = 150 + Math.random() * 300;
+      const dx = Math.cos(angle) * dist;
+      const dy = Math.sin(angle) * dist;
+      const size = 4 + Math.random() * 8;
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      p.style.left = cx + "px";
+      p.style.top  = cy + "px";
+      p.style.width = size + "px";
+      p.style.height = size + "px";
+      p.style.background = color;
+      p.style.boxShadow = `0 0 10px ${color}, 0 0 20px ${color}`;
+      p.style.setProperty("--dx", dx + "px");
+      p.style.setProperty("--dy", dy + "px");
+      p.style.animation = `particleBurst ${0.8 + Math.random() * 0.6}s ease-out forwards`;
+      particleBox.appendChild(p);
+      setTimeout(() => p.remove(), 1500);
+    }
+  }
+
+  // 閃光效果
+  function flashScreen() {
+    flashOverlay.classList.add("active");
+    setTimeout(() => flashOverlay.classList.remove("active"), 400);
+  }
+
+  // 清除所有特效 class
+  function clearFxClasses() {
+    const classes = [
+      "fx-fade-out", "fx-fade-in",
+      "fx-zoom-out", "fx-zoom-in",
+      "fx-slide-out", "fx-slide-in",
+      "fx-flip-out", "fx-flip-in",
+      "fx-rotate-out", "fx-rotate-in",
+      "fx-blur-out", "fx-blur-in"
+    ];
+    classes.forEach(c => canvaFrame.classList.remove(c));
+  }
+
+  // 執行切換特效並重載 iframe
+  function playTransition(newSrc) {
+    let fx = fxSelect.value;
+    if (fx === "random") {
+      fx = ALL_FX[Math.floor(Math.random() * ALL_FX.length)];
+    }
+
+    clearFxClasses();
+
+    // 先做「離開」動畫
+    if (fx === "fade")   canvaFrame.classList.add("fx-fade-out");
+    if (fx === "zoom")   canvaFrame.classList.add("fx-zoom-out");
+    if (fx === "slide")  canvaFrame.classList.add("fx-slide-out");
+    if (fx === "flip")   canvaFrame.classList.add("fx-flip-out");
+    if (fx === "rotate") canvaFrame.classList.add("fx-rotate-out");
+    if (fx === "blur")   canvaFrame.classList.add("fx-blur-out");
+    if (fx === "flash") {
+      canvaFrame.classList.add("fx-fade-out");
+      flashScreen();
+      burstParticles(50);
+    }
+
+    // 動畫中途重載 iframe
+    setTimeout(() => {
+      canvaFrame.src = newSrc;
+
+      // 切換到「進入」動畫
+      clearFxClasses();
+      if (fx === "fade")   canvaFrame.classList.add("fx-fade-in");
+      if (fx === "zoom")   canvaFrame.classList.add("fx-zoom-in");
+      if (fx === "slide")  canvaFrame.classList.add("fx-slide-in");
+      if (fx === "flip")   canvaFrame.classList.add("fx-flip-in");
+      if (fx === "rotate") canvaFrame.classList.add("fx-rotate-in");
+      if (fx === "blur")   canvaFrame.classList.add("fx-blur-in");
+      if (fx === "flash")  canvaFrame.classList.add("fx-fade-in");
+
+      // 部分特效搭配額外粒子
+      if (fx !== "flash" && particleTgl.checked && Math.random() > 0.4) {
+        burstParticles(15);
+      }
+    }, 500);
+  }
 
   function applyMode(mode) {
     // 清除舊的強制輪播計時器
@@ -294,6 +470,10 @@
       clearInterval(forceInterval);
       forceInterval = null;
     }
+    clearFxClasses();
+    canvaFrame.style.opacity = "1";
+    canvaFrame.style.transform = "";
+    canvaFrame.style.filter = "";
 
     if (mode === "watch") {
       // 模式 1：Canva watch 端點自動播放 + 5 秒計時
@@ -302,15 +482,15 @@
       // 模式 2：傳統 view embed（需手動）
       canvaFrame.src = DESIGN_BASE + "/view?embed";
     } else if (mode === "force") {
-      // 模式 3：強制每 5 秒重載 iframe 帶 page 參數
+      // 模式 3：強制每 8 秒重載 iframe 帶 page 參數 + 切換特效
       currentPage = 1;
-      canvaFrame.src = DESIGN_BASE + "/view?embed&ui=eyJBIjp7IkEiOnRydWV9fQ#" + currentPage;
+      canvaFrame.src = DESIGN_BASE + "/view?embed#" + currentPage;
       forceInterval = setInterval(() => {
         currentPage++;
-        // 到頁尾後嘗試循環回第一頁（Canva 若頁數不足會停在最後一頁）
         if (currentPage > 50) currentPage = 1;
-        canvaFrame.src = DESIGN_BASE + "/view?embed#" + currentPage;
-      }, 5000);
+        const newSrc = DESIGN_BASE + "/view?embed#" + currentPage;
+        playTransition(newSrc);
+      }, 8000);
     }
   }
 
