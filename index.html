@@ -115,11 +115,24 @@
     z-index: 1000;
     box-shadow: 0 4px 20px rgba(0,0,0,0.5);
     backdrop-filter: blur(8px);
-    transition: transform 0.3s, opacity 0.3s;
+    transition: transform 0.3s, opacity 0.3s, width 0.3s, height 0.3s, padding 0.3s;
+    overflow: hidden;
   }
   #panel.collapsed {
-    transform: translateY(calc(100% - 36px));
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    border-radius: 50%;
+    cursor: pointer;
   }
+  #panel.collapsed .header {
+    margin: 0; padding: 0; border: none;
+    width: 100%; height: 100%;
+    justify-content: center;
+  }
+  #panel.collapsed .header .title { display: none; }
+  #panel.collapsed .header .toggle { font-size: 20px; opacity: 1; }
+  #panel.collapsed .body { display: none; }
   #panel .header {
     display: flex; justify-content: space-between; align-items: center;
     margin-bottom: 10px; padding-bottom: 8px;
@@ -162,6 +175,7 @@
     <span class="title">🎵 音樂排程</span>
     <span class="toggle" id="toggleBtn">▼</span>
   </div>
+  <div class="body" id="panelBody">
   <div class="row">
     <span class="label">目前時間</span>
     <span class="value" id="clock">--:--:--</span>
@@ -176,15 +190,15 @@
   </div>
   <div class="row volume-row">
     <span class="label">🔊</span>
-    <input type="range" id="volume" min="0" max="100" value="50">
-    <span class="vol-val" id="volVal">50%</span>
+    <input type="range" id="volume" min="0" max="100" value="25">
+    <span class="vol-val" id="volVal">25%</span>
   </div>
   <div class="row" style="margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.1); flex-direction:column; align-items:stretch;">
     <span class="label" style="margin-bottom:6px;">Canva 輪播模式</span>
     <select id="modeSelect" style="background:#333; color:#fff; border:1px solid #555; border-radius:4px; padding:4px; font-size:12px;">
       <option value="watch">模式 1：watch 自動播放（預設）</option>
       <option value="view">模式 2：view embed（手動）</option>
-      <option value="force">模式 3：強制每 8 秒重載換頁</option>
+      <option value="force" id="modeForceOption">模式 3：強制自動換頁</option>
     </select>
     <span class="label" style="margin:8px 0 6px;">切換特效（模式 3 專用）</span>
     <select id="fxSelect" style="background:#333; color:#fff; border:1px solid #555; border-radius:4px; padding:4px; font-size:12px;">
@@ -202,6 +216,7 @@
       <span>啟用粒子特效</span>
     </label>
     <button id="reloadBtn" style="margin-top:8px; background:#2196f3; color:#fff; border:none; border-radius:4px; padding:6px; font-size:12px; cursor:pointer;">套用並重載 Canva</button>
+  </div>
   </div>
 </div>
 
@@ -222,7 +237,20 @@
 </div>
 
 <script>
-  // ============ 音樂排程表 ============
+  // ============================================
+  // ⚙️ 使用者可調整設定區
+  // ============================================
+
+  // 🔢 Canva 簡報總頁數（播完會自動循環回第 1 頁）
+  const TOTAL_PAGES = 9;
+
+  // ⏱ 模式 3 每頁停留秒數
+  const SLIDE_INTERVAL_MS = 8000;
+
+  // 🔊 初始音量（0~100）
+  const INITIAL_VOLUME = 25;
+
+  // 🎵 音樂排程表（每段時間內循環播放 CLAP3.mp3）
   const schedule = [
     { start: "08:10", end: "08:20" },
     { start: "09:05", end: "09:15" },
@@ -234,6 +262,8 @@
     { start: "14:45", end: "14:55" },
     { start: "15:40", end: "15:55" }
   ];
+
+  // ============================================
 
   // ============ DOM 參考 ============
   const audio     = document.getElementById("bgm");
@@ -248,8 +278,10 @@
   const panelHdr  = document.getElementById("panelHeader");
   const toggleBtn = document.getElementById("toggleBtn");
 
-  // ============ 初始音量 50% ============
-  audio.volume = 0.5;
+  // ============ 初始音量 ============
+  audio.volume = INITIAL_VOLUME / 100;
+  volSlider.value = INITIAL_VOLUME;
+  volVal.textContent = INITIAL_VOLUME + "%";
   volSlider.addEventListener("input", () => {
     const v = parseInt(volSlider.value, 10);
     audio.volume = v / 100;
@@ -275,7 +307,7 @@
   // ============ 摺疊面板 ============
   panelHdr.addEventListener("click", () => {
     panel.classList.toggle("collapsed");
-    toggleBtn.textContent = panel.classList.contains("collapsed") ? "▲" : "▼";
+    toggleBtn.textContent = panel.classList.contains("collapsed") ? "🎵" : "▼";
   });
 
   // ============ 工具函式 ============
@@ -483,21 +515,28 @@
       // 模式 2：傳統 view embed（需手動）
       canvaFrame.src = DESIGN_BASE + "/view?embed";
     } else if (mode === "force") {
-      // 模式 3：強制每 8 秒重載 iframe 帶 page 參數 + 切換特效
+      // 模式 3：強制每 N 秒重載 iframe 切換到下一頁 + 切換特效
       currentPage = 1;
       canvaFrame.src = DESIGN_BASE + "/view?embed#" + currentPage;
       forceInterval = setInterval(() => {
         currentPage++;
-        if (currentPage > 50) currentPage = 1;
+        // 超過總頁數 → 循環回第 1 頁
+        if (currentPage > TOTAL_PAGES) currentPage = 1;
         const newSrc = DESIGN_BASE + "/view?embed#" + currentPage;
         playTransition(newSrc);
-      }, 8000);
+      }, SLIDE_INTERVAL_MS);
     }
   }
 
   reloadBtn.addEventListener("click", () => {
     applyMode(modeSelect.value);
   });
+
+  // 依設定動態更新模式 3 選項文字
+  const modeForceOption = document.getElementById("modeForceOption");
+  if (modeForceOption) {
+    modeForceOption.textContent = `模式 3：強制每 ${SLIDE_INTERVAL_MS / 1000} 秒重載換頁`;
+  }
 </script>
 </body>
 </html>
