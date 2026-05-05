@@ -171,7 +171,7 @@
 </div>
 
 <!-- 音訊元素 -->
-<audio id="bgm" src="CLAP3.mp3" loop preload="auto"></audio>
+<audio id="bgm" src="Midday_Pavement.mp3" loop preload="auto"></audio>
 
 <!-- 控制面板 -->
 <div id="panel">
@@ -254,7 +254,7 @@
   // 🔊 初始音量（0~100）— 直接改此數值即可調整
   const INITIAL_VOLUME = 50;
 
-  // 🎵 音樂排程表（每段時間內循環播放 CLAP3.mp3）
+  // 🎵 音樂排程表（每段時間內循環播放 Midday_Pavement.mp3）
   const schedule = [
     { start: "08:10", end: "08:20" },
     { start: "09:05", end: "09:15" },
@@ -371,6 +371,15 @@
     return null; // 今日已無
   }
 
+  // 確保在排程時段內，音樂被意外中斷時會自動恢復
+  function ensureScheduledAudioPlayback() {
+    if (!activated) return;
+    const cur = currentSlot(getNowHM());
+    if (cur && audio.paused) {
+      audio.play().catch(err => console.warn("播放失敗:", err));
+    }
+  }
+
   // ============ 主循環（每秒檢查） ============
   function tick() {
     const nowHM  = getNowHM();
@@ -426,6 +435,9 @@
   const flashOverlay = document.getElementById("flashOverlay");
   const particleBox  = document.getElementById("particles");
   const DESIGN_BASE  = "https://www.canva.com/design/DAHINop9Qvg/1dv4RlbZUFhmdYe3TQ-yTg";
+
+  // 某些瀏覽器在 iframe 重載時可能暫停媒體，載入後再保險恢復一次
+  canvaFrame.addEventListener("load", ensureScheduledAudioPlayback);
 
   let forceInterval = null;
   let currentPage   = 1;
