@@ -171,7 +171,7 @@
 </div>
 
 <!-- 音訊元素 -->
-<audio id="bgm" src="Midday_Pavement.mp3" loop preload="auto"></audio>
+<audio id="bgm" src="Midday_Pavement.mp3" preload="auto"></audio>
 
 <!-- 控制面板 -->
 <div id="panel">
@@ -254,7 +254,14 @@
   // 🔊 初始音量（0~100）— 直接改此數值即可調整
   const INITIAL_VOLUME = 50;
 
-  // 🎵 音樂排程表（每段時間內循環播放 Midday_Pavement.mp3）
+  // 🎵 指定時段內輪播歌曲（依序循環）
+  const playlist = [
+    "Midday_Pavement.mp3",
+    "36skill.mp3",
+    "HEART.mp3"
+  ];
+
+  // 🎵 音樂排程表（只在時段內播放）
   const schedule = [
     { start: "08:10", end: "08:20" },
     { start: "09:05", end: "09:15" },
@@ -281,6 +288,27 @@
   const panel     = document.getElementById("panel");
   const panelHdr  = document.getElementById("panelHeader");
   const toggleBtn = document.getElementById("toggleBtn");
+  let currentTrackIndex = 0;
+
+  function setTrackByIndex(index) {
+    currentTrackIndex = index % playlist.length;
+    audio.src = playlist[currentTrackIndex];
+    audio.load();
+  }
+
+  function playCurrentTrack() {
+    if (audio.paused) {
+      audio.play().catch(err => console.warn("播放失敗:", err));
+    }
+  }
+
+  function playNextTrack() {
+    setTrackByIndex(currentTrackIndex + 1);
+    playCurrentTrack();
+  }
+
+  // 初始化第一首
+  setTrackByIndex(0);
 
   // ============ 初始音量 ============
   audio.volume = INITIAL_VOLUME / 100;
@@ -290,6 +318,13 @@
     const v = parseInt(volSlider.value, 10);
     audio.volume = v / 100;
     volVal.textContent = v + "%";
+  });
+
+  // 單曲結束後，在排程時段內切到下一首
+  audio.addEventListener("ended", () => {
+    if (!activated) return;
+    if (!currentSlot(getNowHM())) return;
+    playNextTrack();
   });
 
   // ============ 啟用按鈕 ============
@@ -376,7 +411,7 @@
     if (!activated) return;
     const cur = currentSlot(getNowHM());
     if (cur && audio.paused) {
-      audio.play().catch(err => console.warn("播放失敗:", err));
+      playCurrentTrack();
     }
   }
 
@@ -393,9 +428,7 @@
     if (activated) {
       if (cur) {
         // 在時段內
-        if (audio.paused) {
-          audio.play().catch(err => console.warn("播放失敗:", err));
-        }
+        playCurrentTrack();
         statusEl.textContent = "🔊 播放中";
         statusEl.className = "value status-playing";
         nextEl.textContent = cur.start + " ~ " + cur.end + "（進行中）";
@@ -403,8 +436,9 @@
         // 不在任何時段內
         if (!audio.paused) {
           audio.pause();
-          audio.currentTime = 0;
         }
+        audio.currentTime = 0;
+        setTrackByIndex(0);
         statusEl.textContent = "🔇 待機";
         statusEl.className = "value status-idle";
 
